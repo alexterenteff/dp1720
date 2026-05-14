@@ -10,43 +10,46 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
+# ===== РАСШИРЕННЫЙ СПИСОК КАНАЛОВ =====
 SOURCES = [
-    # Стартапы и венчур (из рейтинга INCRussia)
+    # Новые авторы
+    "Oskar_Hartmann",        # Оскар Хартманн — бизнес-ангел, стартапы
+    "rybakovigor",           # Игорь Рыбаков — миллиардер, масштабирование
+    "sokolovskiy",           # Александр Соколовский — digital, AI
+    "EmpathyBiz",            # Евгений Щепин — управление, люди, бренд
+    "TRANSFORMATOR_TV",      # Дмитрий Портнягин — бизнес-блогер СНГ
+    "semchurin_live",        # Никита Семчурин — Telegram, медиа
+    "spiridonovmax",         # Максим Спиридонов — IT, инвестиции
+    "chernyshev",            # Александр Чернышев — маркетинг, продажи
+
+    # Остальные предпринимательские каналы
     "the_edinorog",
     "rus_venture",
     "temnaya_storona",
-    "karpova_ventures",
     "street_mba",
-    "dmitry_kalaev",
-    "ebitda_solutions",
     "serafim_livestream",
     "bogdanissimmo",
-    "matvey_kukuy",
     "kyrillic",
     "kumar_solo",
     "indeks_dyatla",
-    
-    # Бизнес и управление (из опроса INCRussia)
     "molyanov",
     "maximspiridonov",
     "sostoyanie_potoka",
     "trevozhny_hr",
     "glavred_club",
     "zhenya_lepekhin",
-    
-    # Ваши авторы
-    "kutergin_v_ogne",
     "fedorinsights",
     "MargulanSeissembai",
     "ovchinnikov_stepan",
-    "mikerybakov",
     "grebenukm",
+    "kutergin_v_ogne",
+    "matvey_kukuy",
     "a_cherniak"
 ]
 
 POSTS_LIMIT_PER_SOURCE = 3
 MAX_POSTS_IN_DIGEST = 10
-MAX_AGE_DAYS = 7           # ← изменено: 7 дней вместо 24 часов
+MAX_AGE_DAYS = 7
 HISTORY_FILE = "published.json"
 
 def load_history():
@@ -124,31 +127,39 @@ def parse_channel(channel_name, limit):
 
 def get_author_display_name(author_username):
     author_names = {
+        # Новые авторы
+        "Oskar_Hartmann": "Оскар Хартманн",
+        "rybakovigor": "Игорь Рыбаков",
+        "sokolovskiy": "Александр Соколовский",
+        "EmpathyBiz": "Евгений Щепин",
+        "TRANSFORMATOR_TV": "Дмитрий Портнягин",
+        "semchurin_live": "Никита Семчурин",
+        "spiridonovmax": "Максим Спиридонов",
+        "chernyshev": "Александр Чернышев",
+        # Стартапы и венчур
         "the_edinorog": "The Edinorog 🦄",
         "rus_venture": "Русский венчур",
         "temnaya_storona": "Темная сторона / Аркадий Морейнис",
-        "karpova_ventures": "Karpova Ventures",
         "street_mba": "Венчур по понятиям",
-        "dmitry_kalaev": "Дмитрий Калаев / ФРИИ",
-        "ebitda_solutions": "Ebitda Solutions",
         "serafim_livestream": "Serafim Livestream",
         "bogdanissimmo": "BOGDANISSSIMO",
-        "matvey_kukuy": "Матвей Кукуй",
         "kyrillic": "Kyrillic",
         "kumar_solo": "Kumar & Solo",
         "indeks_dyatla": "Индекс дятла",
+        # Управление и бизнес
         "molyanov": "Павел Молянов",
         "maximspiridonov": "Максим Спиридонов",
-        "sostoyanie_potoka": "Состояние потока / Наиля Асланова",
-        "trevozhny_hr": "Тревожный эйчар",
+        "sostoyanie_potoka": "состояние потока / Наиля Асланова",
+        "trevozhny_hr": "тревожный эйчар",
         "glavred_club": "Клуб главредов",
         "zhenya_lepekhin": "Женя Лепёхин",
-        "kutergin_v_ogne": "Кутергин в огне 🔥",
+        # Ваши авторы
         "fedorinsights": "Фёдор Овчинников",
         "MargulanSeissembai": "Маргулан Сейсембаев",
         "ovchinnikov_stepan": "Степан Овчинников",
-        "mikerybakov": "Михаил Рыбаков",
         "grebenukm": "Михаил Гребенюк",
+        "kutergin_v_ogne": "Кутергин в огне",
+        "matvey_kukuy": "Матвей Кукуй",
         "a_cherniak": "Алексей Черняк"
     }
     return author_names.get(author_username, f"@{author_username}")
