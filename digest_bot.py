@@ -10,25 +10,41 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
-# ===== ОБНОВЛЁННЫЙ СПИСОК КАНАЛОВ =====
+# ===== ТОЛЬКО ПРЕДПРИНИМАТЕЛЬСКИЕ КАНАЛЫ =====
 SOURCES = [
-    "fedorinsights",          # Фёдор Овчинников — предприниматель, инсайты
-    "MargulanSeissembai",     # Маргулан Сейсембаев — бизнес, инвестиции, стратегии
-    "ovchinnikov_stepan",     # Степан Овчинников — IT-предприниматель
-    "mikerybakov",            # Михаил Рыбаков — бизнес-консультант
-    "grebenukm",              # Михаил Гребенюк — развитие малого бизнеса
-    "kutergin_v_ogne",        # Кутергин — сооснователь YouDo
-    "bogdanissimmo",          # Путь AI-стартапа к $100K/месяц
-    "serafim_livestream",     # Стартап после Y Combinator
-    "matvey_kukuy",           # Матвей Кукуй — стартапы и технологии
-    "kyrillic",               # Запуск стартапов за рубежом
-    "street_mba",             # Венчур по понятиям
-    "a_cherniak"              # Алексей Черняк — AI, стартапы, инвестиции
+    # Стартапы и венчур
+    "the_edinorog",
+    "rus_venture", 
+    "temnaya_storona",
+    "street_mba",
+    "serafim_livestream",
+    "bogdanissimmo",
+    "kyrillic",
+    "kumar_solo",
+    "indeks_dyatla",
+    
+    # Управление и бизнес (личные блоги предпринимателей)
+    "molyanov",
+    "maximspiridonov",
+    "sostoyanie_potoka",
+    "trevozhny_hr",
+    "glavred_club",
+    "zhenya_lepekhin",
+    
+    # Ваши авторы
+    "fedorinsights",
+    "MargulanSeissembai",
+    "ovchinnikov_stepan",
+    "mikerybakov",
+    "grebenukm",
+    "kutergin_v_ogne",
+    "matvey_kukuy",
+    "a_cherniak"
 ]
 
-POSTS_LIMIT_PER_SOURCE = 3      # сколько постов берём с каждого канала
-MAX_POSTS_IN_DIGEST = 10        # итоговое количество пунктов в дайджесте
-MAX_AGE_DAYS = 7                # посты не старше 7 дней
+POSTS_LIMIT_PER_SOURCE = 2      # по 2 поста с канала
+MAX_POSTS_IN_DIGEST = 10        # итоговое количество пунктов
+MAX_AGE_HOURS = 24              # только за последние 24 часа
 HISTORY_FILE = "published.json"
 
 def load_history():
@@ -59,14 +75,13 @@ def commit_and_push():
         print(f"⚠️ Git error: {e}")
 
 def parse_channel(channel_name, limit):
-    """Парсит публичный Telegram-канал"""
     url = f"https://t.me/s/{channel_name}"
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     posts = []
     try:
         r = requests.get(url, headers=headers, timeout=15)
         if r.status_code != 200:
-            print(f"  ❌ Канал @{channel_name} не найден (статус {r.status_code})")
+            print(f"  ❌ Канал @{channel_name} не найден")
             return posts
         
         html = r.text
@@ -74,7 +89,7 @@ def parse_channel(channel_name, limit):
         texts = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
         dates = re.findall(r'<time datetime="([^"]+)"', html)
 
-        cutoff_time = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
         
         for i, raw_text in enumerate(texts[:limit]):
             clean = re.sub(r'<[^>]+>', '', raw_text)
@@ -89,6 +104,7 @@ def parse_channel(channel_name, limit):
                     post_date = datetime.fromisoformat(d_str)
                 except:
                     pass
+            
             if post_date and post_date < cutoff_time:
                 continue
             
@@ -99,31 +115,43 @@ def parse_channel(channel_name, limit):
                 'author': channel_name,
                 'date': post_date
             })
-        print(f"  ✅ @{channel_name}: найдено {len(posts)} свежих постов")
+        print(f"  ✅ @{channel_name}: найдено {len(posts)} постов за 24 часа")
     except Exception as e:
         print(f"  ❌ Ошибка @{channel_name}: {e}")
     return posts
 
 def get_author_display_name(author_username):
-    """Возвращает отображаемое имя автора по username канала"""
     author_names = {
+        # Стартапы и венчур
+        "the_edinorog": "The Edinorog 🦄",
+        "rus_venture": "Русский венчур",
+        "temnaya_storona": "Темная сторона / Аркадий Морейнис",
+        "street_mba": "Венчур по понятиям",
+        "serafim_livestream": "Serafim Livestream",
+        "bogdanissimmo": "BOGDANISSSIMO",
+        "kyrillic": "Kyrillic",
+        "kumar_solo": "Kumar & Solo",
+        "indeks_dyatla": "Индекс дятла",
+        # Управление и бизнес
+        "molyanov": "Павел Молянов",
+        "maximspiridonov": "Максим Спиридонов",
+        "sostoyanie_potoka": "состояние потока / Наиля Асланова",
+        "trevozhny_hr": "тревожный эйчар",
+        "glavred_club": "Клуб главредов",
+        "zhenya_lepekhin": "Женя Лепёхин",
+        # Ваши авторы
         "fedorinsights": "Фёдор Овчинников",
         "MargulanSeissembai": "Маргулан Сейсембаев",
         "ovchinnikov_stepan": "Степан Овчинников",
         "mikerybakov": "Михаил Рыбаков",
         "grebenukm": "Михаил Гребенюк",
-        "kutergin_v_ogne": "Кутергин (YouDo)",
-        "bogdanissimmo": "BOGDANISSSIMO",
-        "serafim_livestream": "Serafim Livestream",
+        "kutergin_v_ogne": "Кутергин в огне",
         "matvey_kukuy": "Матвей Кукуй",
-        "kyrillic": "Kyrillic",
-        "street_mba": "Венчур по понятиям",
         "a_cherniak": "Алексей Черняк"
     }
     return author_names.get(author_username, f"@{author_username}")
 
 def generate_title_and_summary(text, author_name):
-    """YandexGPT: заголовок + саммари с упоминанием автора"""
     if not YC_API_KEY or not YC_FOLDER_ID:
         return text[:60], text[:250]
     try:
@@ -135,7 +163,7 @@ def generate_title_and_summary(text, author_name):
         }
         prompt = f"""Ты — редактор бизнес-дайджеста. Сделай из этого поста предпринимателя:
 1. Яркий заголовок (до 60 символов).
-2. Саммари (2 предложения, до 250 символов), которое передаёт главную мысль автора.
+2. Саммари (2 предложения, до 250 символов).
 
 Пост:
 {text[:1800]}
@@ -169,7 +197,6 @@ def collect_posts(published_ids):
         posts = parse_channel(ch, POSTS_LIMIT_PER_SOURCE)
         for p in posts:
             if p['unique_id'] and p['unique_id'] in published_ids:
-                print(f"  ⏭️ Пропуск (уже публиковался)")
                 continue
             if p['unique_id']:
                 published_ids.append(p['unique_id'])
@@ -190,7 +217,7 @@ def collect_posts(published_ids):
 
 def send_digest(posts):
     if not posts:
-        msg = "🤖 За сегодня нет свежих постов от предпринимателей.\n\n📱 Подпишись: " + CHANNEL_ID
+        msg = "🤖 За последние 24 часа нет новых постов от предпринимателей.\n\n📱 Подпишись: " + CHANNEL_ID
     else:
         msg = "🔥 <b>Дайджест российских предпринимателей</b>\n\n"
         for idx, p in enumerate(posts, 1):
@@ -214,15 +241,13 @@ def send_digest(posts):
         return False
 
 def main():
-    print("🚀 Запуск дайджеста self-made предпринимателей")
-    print(f"📡 Источники: {', '.join(SOURCES)}")
-    print(f"⏰ Посты не старше {MAX_AGE_DAYS} дней")
+    print("🚀 Запуск дайджеста предпринимателей")
+    print(f"📡 Источников: {len(SOURCES)}")
+    print(f"⏰ Посты только за последние {MAX_AGE_HOURS} часов")
     
     if not BOT_TOKEN or not CHANNEL_ID:
         print("❌ Нет TELEGRAM_BOT_TOKEN или CHANNEL_ID")
         sys.exit(1)
-    if not YC_API_KEY or not YC_FOLDER_ID:
-        print("⚠️ YandexGPT не настроен — заголовки будут сырыми")
 
     history = load_history()
     print(f"📚 В истории {len(history)} постов")
@@ -239,7 +264,7 @@ def main():
         else:
             print("❌ Ошибка публикации")
     else:
-        print("Нет новых постов")
+        print("Нет новых постов за последние 24 часа")
         sys.exit(0)
 
 if __name__ == "__main__":
