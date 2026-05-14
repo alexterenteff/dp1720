@@ -10,20 +10,23 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
-# ===== ТОЛЬКО ПРЕДПРИНИМАТЕЛЬСКИЕ КАНАЛЫ =====
 SOURCES = [
-    # Стартапы и венчур
+    # Стартапы и венчур (из рейтинга INCRussia)
     "the_edinorog",
-    "rus_venture", 
+    "rus_venture",
     "temnaya_storona",
+    "karpova_ventures",
     "street_mba",
+    "dmitry_kalaev",
+    "ebitda_solutions",
     "serafim_livestream",
     "bogdanissimmo",
+    "matvey_kukuy",
     "kyrillic",
     "kumar_solo",
     "indeks_dyatla",
     
-    # Управление и бизнес (личные блоги предпринимателей)
+    # Бизнес и управление (из опроса INCRussia)
     "molyanov",
     "maximspiridonov",
     "sostoyanie_potoka",
@@ -32,19 +35,18 @@ SOURCES = [
     "zhenya_lepekhin",
     
     # Ваши авторы
+    "kutergin_v_ogne",
     "fedorinsights",
     "MargulanSeissembai",
     "ovchinnikov_stepan",
     "mikerybakov",
     "grebenukm",
-    "kutergin_v_ogne",
-    "matvey_kukuy",
     "a_cherniak"
 ]
 
-POSTS_LIMIT_PER_SOURCE = 2      # по 2 поста с канала
-MAX_POSTS_IN_DIGEST = 10        # итоговое количество пунктов
-MAX_AGE_HOURS = 24              # только за последние 24 часа
+POSTS_LIMIT_PER_SOURCE = 3
+MAX_POSTS_IN_DIGEST = 10
+MAX_AGE_DAYS = 7           # ← изменено: 7 дней вместо 24 часов
 HISTORY_FILE = "published.json"
 
 def load_history():
@@ -89,7 +91,7 @@ def parse_channel(channel_name, limit):
         texts = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
         dates = re.findall(r'<time datetime="([^"]+)"', html)
 
-        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
         
         for i, raw_text in enumerate(texts[:limit]):
             clean = re.sub(r'<[^>]+>', '', raw_text)
@@ -115,38 +117,38 @@ def parse_channel(channel_name, limit):
                 'author': channel_name,
                 'date': post_date
             })
-        print(f"  ✅ @{channel_name}: найдено {len(posts)} постов за 24 часа")
+        print(f"  ✅ @{channel_name}: найдено {len(posts)} постов за {MAX_AGE_DAYS} дней")
     except Exception as e:
         print(f"  ❌ Ошибка @{channel_name}: {e}")
     return posts
 
 def get_author_display_name(author_username):
     author_names = {
-        # Стартапы и венчур
         "the_edinorog": "The Edinorog 🦄",
         "rus_venture": "Русский венчур",
         "temnaya_storona": "Темная сторона / Аркадий Морейнис",
+        "karpova_ventures": "Karpova Ventures",
         "street_mba": "Венчур по понятиям",
+        "dmitry_kalaev": "Дмитрий Калаев / ФРИИ",
+        "ebitda_solutions": "Ebitda Solutions",
         "serafim_livestream": "Serafim Livestream",
         "bogdanissimmo": "BOGDANISSSIMO",
+        "matvey_kukuy": "Матвей Кукуй",
         "kyrillic": "Kyrillic",
         "kumar_solo": "Kumar & Solo",
         "indeks_dyatla": "Индекс дятла",
-        # Управление и бизнес
         "molyanov": "Павел Молянов",
         "maximspiridonov": "Максим Спиридонов",
-        "sostoyanie_potoka": "состояние потока / Наиля Асланова",
-        "trevozhny_hr": "тревожный эйчар",
+        "sostoyanie_potoka": "Состояние потока / Наиля Асланова",
+        "trevozhny_hr": "Тревожный эйчар",
         "glavred_club": "Клуб главредов",
         "zhenya_lepekhin": "Женя Лепёхин",
-        # Ваши авторы
+        "kutergin_v_ogne": "Кутергин в огне 🔥",
         "fedorinsights": "Фёдор Овчинников",
         "MargulanSeissembai": "Маргулан Сейсембаев",
         "ovchinnikov_stepan": "Степан Овчинников",
         "mikerybakov": "Михаил Рыбаков",
         "grebenukm": "Михаил Гребенюк",
-        "kutergin_v_ogne": "Кутергин в огне",
-        "matvey_kukuy": "Матвей Кукуй",
         "a_cherniak": "Алексей Черняк"
     }
     return author_names.get(author_username, f"@{author_username}")
@@ -197,6 +199,7 @@ def collect_posts(published_ids):
         posts = parse_channel(ch, POSTS_LIMIT_PER_SOURCE)
         for p in posts:
             if p['unique_id'] and p['unique_id'] in published_ids:
+                print(f"  ⏭️ Пропуск (уже публиковался)")
                 continue
             if p['unique_id']:
                 published_ids.append(p['unique_id'])
@@ -217,7 +220,7 @@ def collect_posts(published_ids):
 
 def send_digest(posts):
     if not posts:
-        msg = "🤖 За последние 24 часа нет новых постов от предпринимателей.\n\n📱 Подпишись: " + CHANNEL_ID
+        msg = f"🤖 За последние {MAX_AGE_DAYS} дней нет новых постов от предпринимателей.\n\n📱 Подпишись: " + CHANNEL_ID
     else:
         msg = "🔥 <b>Дайджест российских предпринимателей</b>\n\n"
         for idx, p in enumerate(posts, 1):
@@ -243,7 +246,7 @@ def send_digest(posts):
 def main():
     print("🚀 Запуск дайджеста предпринимателей")
     print(f"📡 Источников: {len(SOURCES)}")
-    print(f"⏰ Посты только за последние {MAX_AGE_HOURS} часов")
+    print(f"⏰ Посты за последние {MAX_AGE_DAYS} дней")
     
     if not BOT_TOKEN or not CHANNEL_ID:
         print("❌ Нет TELEGRAM_BOT_TOKEN или CHANNEL_ID")
@@ -264,7 +267,7 @@ def main():
         else:
             print("❌ Ошибка публикации")
     else:
-        print("Нет новых постов за последние 24 часа")
+        print(f"Нет новых постов за последние {MAX_AGE_DAYS} дней")
         sys.exit(0)
 
 if __name__ == "__main__":
