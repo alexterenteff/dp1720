@@ -10,21 +10,23 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
-# ===== АКТУАЛЬНЫЕ КАНАЛЫ SELF-MADE ПРЕДПРИНИМАТЕЛЕЙ =====
+# ===== ОБНОВЛЁННЫЙ СПИСОК КАНАЛОВ =====
 SOURCES = [
-    "ovchinnikov_stepan",     # Степан Овчинников — IT-предприниматель [citation:2][citation:7]
-    "mikerybakov",            # Михаил Рыбаков — бизнес-консультант, коуч [citation:3]
-    "grebenukm",              # Михаил Гребенюк — развитие малого бизнеса [citation:9]
-    "kutergin_v_ogne",        # Кутергин — сооснователь YouDo [citation:1]
-    "bogdanissimmo",          # Путь AI-стартапа к $100K/месяц [citation:1]
-    "serafim_livestream",     # Стартап после Y Combinator [citation:1]
-    "matvey_kukuy",           # Матвей Кукуй — стартапы и технологии [citation:1]
-    "kyrillic",               # Запуск стартапов за рубежом [citation:1]
-    "street_mba",             # Венчур по понятиям [citation:1]
-    "a_cherniak"              # Алексей Черняк — AI, стартапы, инвестиции [citation:1]
+    "fedorinsights",          # Фёдор Овчинников — предприниматель, инсайты
+    "MargulanSeissembai",     # Маргулан Сейсембаев — бизнес, инвестиции, стратегии
+    "ovchinnikov_stepan",     # Степан Овчинников — IT-предприниматель
+    "mikerybakov",            # Михаил Рыбаков — бизнес-консультант
+    "grebenukm",              # Михаил Гребенюк — развитие малого бизнеса
+    "kutergin_v_ogne",        # Кутергин — сооснователь YouDo
+    "bogdanissimmo",          # Путь AI-стартапа к $100K/месяц
+    "serafim_livestream",     # Стартап после Y Combinator
+    "matvey_kukuy",           # Матвей Кукуй — стартапы и технологии
+    "kyrillic",               # Запуск стартапов за рубежом
+    "street_mba",             # Венчур по понятиям
+    "a_cherniak"              # Алексей Черняк — AI, стартапы, инвестиции
 ]
 
-POSTS_LIMIT_PER_SOURCE = 4      # сколько постов берём с каждого канала
+POSTS_LIMIT_PER_SOURCE = 3      # сколько постов берём с каждого канала
 MAX_POSTS_IN_DIGEST = 10        # итоговое количество пунктов в дайджесте
 MAX_AGE_DAYS = 7                # посты не старше 7 дней
 HISTORY_FILE = "published.json"
@@ -80,7 +82,6 @@ def parse_channel(channel_name, limit):
             if not clean or len(clean) < 50:
                 continue
             
-            # Проверка свежести
             post_date = None
             if i < len(dates):
                 try:
@@ -95,6 +96,7 @@ def parse_channel(channel_name, limit):
                 'text': clean[:2500],
                 'link': f"https://t.me/{post_ids[i]}" if i < len(post_ids) else f"https://t.me/{channel_name}",
                 'unique_id': post_ids[i] if i < len(post_ids) else None,
+                'author': channel_name,
                 'date': post_date
             })
         print(f"  ✅ @{channel_name}: найдено {len(posts)} свежих постов")
@@ -102,8 +104,26 @@ def parse_channel(channel_name, limit):
         print(f"  ❌ Ошибка @{channel_name}: {e}")
     return posts
 
-def generate_title_and_summary(text):
-    """YandexGPT: заголовок + саммари"""
+def get_author_display_name(author_username):
+    """Возвращает отображаемое имя автора по username канала"""
+    author_names = {
+        "fedorinsights": "Фёдор Овчинников",
+        "MargulanSeissembai": "Маргулан Сейсембаев",
+        "ovchinnikov_stepan": "Степан Овчинников",
+        "mikerybakov": "Михаил Рыбаков",
+        "grebenukm": "Михаил Гребенюк",
+        "kutergin_v_ogne": "Кутергин (YouDo)",
+        "bogdanissimmo": "BOGDANISSSIMO",
+        "serafim_livestream": "Serafim Livestream",
+        "matvey_kukuy": "Матвей Кукуй",
+        "kyrillic": "Kyrillic",
+        "street_mba": "Венчур по понятиям",
+        "a_cherniak": "Алексей Черняк"
+    }
+    return author_names.get(author_username, f"@{author_username}")
+
+def generate_title_and_summary(text, author_name):
+    """YandexGPT: заголовок + саммари с упоминанием автора"""
     if not YC_API_KEY or not YC_FOLDER_ID:
         return text[:60], text[:250]
     try:
@@ -115,7 +135,7 @@ def generate_title_and_summary(text):
         }
         prompt = f"""Ты — редактор бизнес-дайджеста. Сделай из этого поста предпринимателя:
 1. Яркий заголовок (до 60 символов).
-2. Саммари (2 предложения, до 250 символов).
+2. Саммари (2 предложения, до 250 символов), которое передаёт главную мысль автора.
 
 Пост:
 {text[:1800]}
@@ -149,15 +169,17 @@ def collect_posts(published_ids):
         posts = parse_channel(ch, POSTS_LIMIT_PER_SOURCE)
         for p in posts:
             if p['unique_id'] and p['unique_id'] in published_ids:
-                print(f"  ⏭️ Пропуск (уже публиковался): {p['text'][:40]}...")
+                print(f"  ⏭️ Пропуск (уже публиковался)")
                 continue
             if p['unique_id']:
                 published_ids.append(p['unique_id'])
-            title, summ = generate_title_and_summary(p['text'])
+            author_display = get_author_display_name(p['author'])
+            title, summ = generate_title_and_summary(p['text'], author_display)
             all_posts.append({
                 'title': title,
                 'summary': summ,
-                'link': p['link']
+                'link': p['link'],
+                'author': author_display
             })
             print(f"  ✅ Добавлено: {title[:50]}...")
             if len(all_posts) >= MAX_POSTS_IN_DIGEST:
@@ -174,7 +196,7 @@ def send_digest(posts):
         for idx, p in enumerate(posts, 1):
             msg += f"{idx}. <b>{p['title']}</b>\n"
             msg += f"{p['summary']}\n"
-            msg += f"🔗 <a href=\"{p['link']}\">Читать источник</a>\n\n"
+            msg += f"🔗 <a href=\"{p['link']}\">Читать источник — {p['author']}</a>\n\n"
         msg += "\n💡 Подпишись: " + CHANNEL_ID
     
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
