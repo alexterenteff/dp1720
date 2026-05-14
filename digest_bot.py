@@ -3,27 +3,32 @@ import os
 import sys
 import re
 import json
-from datetime import datetime, timezone
-
-# ===== НАСТРОЙКИ =====
-SOURCES = [
-    "vc_business",          # VC.ru — бизнес
-    "teddy_business",       # Тедди Бизнес
-    "business_people_ru",   # Бизнес люди
-    "sekret_firmy",         # Секрет фирмы
-    "besedka_biz"           # Беседка Бизнес
-]
+from datetime import datetime, timedelta, timezone
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
-POSTS_LIMIT_PER_SOURCE = 5      # сколько постов берём с каждого канала
+# ===== АКТУАЛЬНЫЕ КАНАЛЫ SELF-MADE ПРЕДПРИНИМАТЕЛЕЙ =====
+SOURCES = [
+    "ovchinnikov_stepan",     # Степан Овчинников — IT-предприниматель [citation:2][citation:7]
+    "mikerybakov",            # Михаил Рыбаков — бизнес-консультант, коуч [citation:3]
+    "grebenukm",              # Михаил Гребенюк — развитие малого бизнеса [citation:9]
+    "kutergin_v_ogne",        # Кутергин — сооснователь YouDo [citation:1]
+    "bogdanissimmo",          # Путь AI-стартапа к $100K/месяц [citation:1]
+    "serafim_livestream",     # Стартап после Y Combinator [citation:1]
+    "matvey_kukuy",           # Матвей Кукуй — стартапы и технологии [citation:1]
+    "kyrillic",               # Запуск стартапов за рубежом [citation:1]
+    "street_mba",             # Венчур по понятиям [citation:1]
+    "a_cherniak"              # Алексей Черняк — AI, стартапы, инвестиции [citation:1]
+]
+
+POSTS_LIMIT_PER_SOURCE = 4      # сколько постов берём с каждого канала
 MAX_POSTS_IN_DIGEST = 10        # итоговое количество пунктов в дайджесте
+MAX_AGE_DAYS = 7                # посты не старше 7 дней
 HISTORY_FILE = "published.json"
 
-# ===== РАБОТА С ИСТОРИЕЙ =====
 def load_history():
     if not os.path.exists(HISTORY_FILE):
         return []
@@ -45,31 +50,37 @@ def commit_and_push():
         subprocess.run(['git', 'add', HISTORY_FILE], check=False)
         result = subprocess.run(['git', 'diff', '--cached', '--quiet'], check=False)
         if result.returncode != 0:
-            subprocess.run(['git', 'commit', '-m', f'Update history {datetime.now()}', '--quiet'], check=False)
+            subprocess.run(['git', 'commit', '-m', f'Update history {datetime.now().strftime("%Y-%m-%d")}', '--quiet'], check=False)
             subprocess.run(['git', 'push', '--quiet'], check=False)
-            print("✅ История сохранена в репозиторий")
+            print("✅ История сохранена")
     except Exception as e:
-        print(f"⚠️ Ошибка git: {e}")
+        print(f"⚠️ Git error: {e}")
 
-# ===== ПАРСИНГ TELEGRAM-КАНАЛА =====
 def parse_channel(channel_name, limit):
+    """Парсит публичный Telegram-канал"""
     url = f"https://t.me/s/{channel_name}"
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
     posts = []
     try:
         r = requests.get(url, headers=headers, timeout=15)
         if r.status_code != 200:
+            print(f"  ❌ Канал @{channel_name} не найден (статус {r.status_code})")
             return posts
+        
         html = r.text
         post_ids = re.findall(r'data-post="([^"]+)"', html)
         texts = re.findall(r'<div class="tgme_widget_message_text[^>]*>(.*?)</div>', html, re.DOTALL)
         dates = re.findall(r'<time datetime="([^"]+)"', html)
 
+        cutoff_time = datetime.now(timezone.utc) - timedelta(days=MAX_AGE_DAYS)
+        
         for i, raw_text in enumerate(texts[:limit]):
             clean = re.sub(r'<[^>]+>', '', raw_text)
             clean = clean.replace('&quot;', '"').replace('&amp;', '&').strip()
             if not clean or len(clean) < 50:
                 continue
+            
+            # Проверка свежести
             post_date = None
             if i < len(dates):
                 try:
@@ -77,22 +88,24 @@ def parse_channel(channel_name, limit):
                     post_date = datetime.fromisoformat(d_str)
                 except:
                     pass
-            # пропускаем посты старше 14 дней
-            if post_date and (datetime.now(timezone.utc) - post_date).days > 14:
+            if post_date and post_date < cutoff_time:
                 continue
+            
             posts.append({
                 'text': clean[:2500],
                 'link': f"https://t.me/{post_ids[i]}" if i < len(post_ids) else f"https://t.me/{channel_name}",
-                'unique_id': post_ids[i] if i < len(post_ids) else None
+                'unique_id': post_ids[i] if i < len(post_ids) else None,
+                'date': post_date
             })
+        print(f"  ✅ @{channel_name}: найдено {len(posts)} свежих постов")
     except Exception as e:
-        print(f"Ошибка при парсинге @{channel_name}: {e}")
+        print(f"  ❌ Ошибка @{channel_name}: {e}")
     return posts
 
-# ===== ЯНДЕКС GPT: ЗАГОЛОВОК + САММАРИ =====
 def generate_title_and_summary(text):
+    """YandexGPT: заголовок + саммари"""
     if not YC_API_KEY or not YC_FOLDER_ID:
-        return text[:80], text[:300]
+        return text[:60], text[:250]
     try:
         url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
         headers = {
@@ -100,12 +113,12 @@ def generate_title_and_summary(text):
             "x-folder-id": YC_FOLDER_ID,
             "Content-Type": "application/json"
         }
-        prompt = f"""Ты — редактор бизнес-дайджеста. Сделай из этого поста:
-1. Короткий яркий заголовок (до 60 символов).
-2. Саммари (2 предложения, максимум 250 символов).
+        prompt = f"""Ты — редактор бизнес-дайджеста. Сделай из этого поста предпринимателя:
+1. Яркий заголовок (до 60 символов).
+2. Саммари (2 предложения, до 250 символов).
 
 Пост:
-{text[:2000]}
+{text[:1800]}
 
 Ответ строго в формате:
 ЗАГОЛОВОК: <заголовок>
@@ -126,17 +139,17 @@ def generate_title_and_summary(text):
                 title = title[:77] + "..."
             return title, summary
     except Exception as e:
-        print(f"Ошибка YandexGPT: {e}")
+        print(f"  ⚠️ YandexGPT ошибка: {e}")
     return text[:60], text[:250]
 
-# ===== СБОР ВСЕХ ПОСТОВ =====
 def collect_posts(published_ids):
     all_posts = []
     for ch in SOURCES:
-        print(f"Парсинг @{ch}...")
+        print(f"📡 Парсинг @{ch}...")
         posts = parse_channel(ch, POSTS_LIMIT_PER_SOURCE)
         for p in posts:
             if p['unique_id'] and p['unique_id'] in published_ids:
+                print(f"  ⏭️ Пропуск (уже публиковался): {p['text'][:40]}...")
                 continue
             if p['unique_id']:
                 published_ids.append(p['unique_id'])
@@ -146,23 +159,24 @@ def collect_posts(published_ids):
                 'summary': summ,
                 'link': p['link']
             })
+            print(f"  ✅ Добавлено: {title[:50]}...")
             if len(all_posts) >= MAX_POSTS_IN_DIGEST:
                 break
         if len(all_posts) >= MAX_POSTS_IN_DIGEST:
             break
     return all_posts[:MAX_POSTS_IN_DIGEST]
 
-# ===== ПУБЛИКАЦИЯ В TELEGRAM =====
 def send_digest(posts):
     if not posts:
-        msg = "🤖 За сегодня нет свежих постов.\n\n📱 Подпишись: " + CHANNEL_ID
+        msg = "🤖 За сегодня нет свежих постов от предпринимателей.\n\n📱 Подпишись: " + CHANNEL_ID
     else:
-        msg = "📌 **Бизнес-дайджест**\n\n"
+        msg = "🔥 <b>Дайджест российских предпринимателей</b>\n\n"
         for idx, p in enumerate(posts, 1):
             msg += f"{idx}. <b>{p['title']}</b>\n"
             msg += f"{p['summary']}\n"
-            msg += f"🔗 <a href=\"{p['link']}\">Источник</a>\n\n"
+            msg += f"🔗 <a href=\"{p['link']}\">Читать источник</a>\n\n"
         msg += "\n💡 Подпишись: " + CHANNEL_ID
+    
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHANNEL_ID,
@@ -174,28 +188,32 @@ def send_digest(posts):
         r = requests.post(url, json=payload, timeout=15)
         return r.json().get('ok', False)
     except Exception as e:
-        print(f"Ошибка отправки: {e}")
+        print(f"❌ Ошибка отправки: {e}")
         return False
 
-# ===== MAIN =====
 def main():
-    print("🚀 Запуск бизнес-дайджеста")
+    print("🚀 Запуск дайджеста self-made предпринимателей")
+    print(f"📡 Источники: {', '.join(SOURCES)}")
+    print(f"⏰ Посты не старше {MAX_AGE_DAYS} дней")
+    
     if not BOT_TOKEN or not CHANNEL_ID:
         print("❌ Нет TELEGRAM_BOT_TOKEN или CHANNEL_ID")
         sys.exit(1)
     if not YC_API_KEY or not YC_FOLDER_ID:
-        print("⚠️ YandexGPT не будет работать — заголовки/саммари будут сырыми")
+        print("⚠️ YandexGPT не настроен — заголовки будут сырыми")
 
     history = load_history()
+    print(f"📚 В истории {len(history)} постов")
+    
     posts = collect_posts(history)
     print(f"📊 Собрано пунктов: {len(posts)}")
-
+    
     if posts:
         success = send_digest(posts)
         if success:
             save_history(history)
             commit_and_push()
-            print("✅ Дайджест опубликован")
+            print("✅ Дайджест опубликован!")
         else:
             print("❌ Ошибка публикации")
     else:
