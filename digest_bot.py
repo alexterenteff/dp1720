@@ -9,7 +9,6 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID")
 YC_API_KEY = os.environ.get("YC_API_KEY")
 YC_FOLDER_ID = os.environ.get("YC_FOLDER_ID")
 
-# ===== ОБНОВЛЁННЫЙ СПИСОК КАНАЛОВ =====
 SOURCES = [
     "Oskar_Hartmann",
     "rybakovigor",
@@ -23,8 +22,8 @@ SOURCES = [
     "MargulanSeissembai",
     "ruminblog",
     "honestmarketing",
-    "hikollegi",          # возвращён
-    "durov_russia"        # возвращён
+    "hikollegi",
+    "durov_russia"
 ]
 
 MAX_AGE_HOURS = 72
@@ -114,29 +113,78 @@ def generate_summary(text, author_name):
         print(f"YandexGPT ошибка: {e}")
     return text[:200]
 
+def split_into_chunks(posts, max_length=4000):
+    """Разбивает посты на части, чтобы не превысить лимит Telegram"""
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    base_header = "📌 <b>Личный дайджест — всё, что написали за 3 дня</b>\n\n"
+    
+    for idx, p in enumerate(posts, 1):
+        # Формируем один пост
+        post_text = f"{idx}. <b>{p['author']}</b>\n{p['summary']}\n🔗 <a href=\"{p['link']}\">Читать полностью</a>\n\n"
+        post_len = len(post_text)
+        
+        # Если текущий пост + новый пост превышают лимит
+        if current_length + post_len > max_length and current_chunk:
+            # Сохраняем текущую часть
+            chunks.append(base_header + "".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+        
+        current_chunk.append(post_text)
+        current_length += post_len
+    
+    # Добавляем последнюю часть
+    if current_chunk:
+        chunks.append(base_header + "".join(current_chunk))
+    
+    return chunks
+
 def send_to_telegram(posts):
     if not posts:
         msg = "📭 За последние 3 дня новых постов нет."
-    else:
-        msg = "📌 <b>Личный дайджест — всё, что написали за 3 дня</b>\n\n"
-        for idx, p in enumerate(posts, 1):
-            msg += f"{idx}. <b>{p['author']}</b>\n"
-            msg += f"{p['summary']}\n"
-            msg += f"🔗 <a href=\"{p['link']}\">Читать полностью</a>\n\n"
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHANNEL_ID,
+            "text": msg,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=15)
+            return r.json().get('ok', False)
+        except Exception as e:
+            print(f"Ошибка отправки: {e}")
+            return False
     
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL_ID,
-        "text": msg,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True
-    }
-    try:
-        r = requests.post(url, json=payload, timeout=15)
-        return r.json().get('ok', False)
-    except Exception as e:
-        print(f"Ошибка отправки: {e}")
-        return False
+    # Разбиваем на части
+    chunks = split_into_chunks(posts)
+    print(f"📦 Сообщение разбито на {len(chunks)} частей")
+    
+    for i, chunk in enumerate(chunks, 1):
+        if len(chunks) > 1:
+            # Добавляем индикатор части
+            chunk += f"\n\n<i>Часть {i} из {len(chunks)}</i>"
+        
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": CHANNEL_ID,
+            "text": chunk,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=15)
+            if not r.json().get('ok', False):
+                print(f"❌ Ошибка при отправке части {i}")
+                return False
+            print(f"✅ Часть {i} отправлена")
+        except Exception as e:
+            print(f"❌ Ошибка отправки части {i}: {e}")
+            return False
+    
+    return True
 
 def main():
     print("🚀 Личная читалка предпринимателей")
